@@ -151,6 +151,10 @@ private:
 
     PacketReadyNotification packetReadyNotification;
 
+    u_int64_t lastTimeOffset;
+    u_int64_t aliveCount;
+    u_int64_t sampleCount;
+    
     void initProperties();
     void propertyChanged();
     void triggerModeChanged();

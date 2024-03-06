@@ -74,6 +74,11 @@ void ScalingFbImpl::initProperties()
     objPtr.getOnPropertyValueWrite("OutputUnit") +=
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { propertyChanged(true); };
 
+    // Intit "filter"
+    memset(&consumeCpuCoeff, 0, sizeof(consumeCpuCoeff));
+    memset(&consumeCpuDelay, 0, sizeof(consumeCpuDelay));
+    consumeCpuCoeff[0] = 1.0;
+
     readProperties();
 }
 
@@ -230,8 +235,50 @@ void ScalingFbImpl::processDataPacket(const DataPacketPtr& packet)
     const auto outputPacket = DataPacketWithDomain(packet.getDomainPacket(), outputDataDescriptor, sampleCount);
     auto outputData = static_cast<Float*>(outputPacket.getData());
 
-    for (size_t i = 0; i < sampleCount; i++)
-        *outputData++ = scale * static_cast<Float>(*inputData++) + offset;
+    // Check time
+    auto timeOffset = packet.getDomainPacket().getOffset().getIntValue();
+    u_int64_t sampleDelta = inputDomainDataDescriptor.getRule().getParameters()["delta"];
+    auto sampleIncrement = (timeOffset - lastTimeOffset) / sampleDelta;
+    lastTimeOffset = timeOffset;
+    
+    // Check block start time
+    if (sampleCount != sampleIncrement) {
+        printf("Scaler sampleCount: %ld Time: %lu Time increment = %ld samples\n", sampleCount, timeOffset, sampleIncrement);
+    }
+
+#define FIR_LENGTH 128
+
+    auto pInputData = inputData;
+    Float* pDelay = &consumeCpuDelay[FIR_LENGTH - 1];
+
+    // Copy input data to end of history
+    for (size_t sampleIdx = 0; sampleIdx < sampleCount; sampleIdx++) {
+        *pDelay++ = static_cast<Float>(*pInputData++); 
+    }
+
+    Float* pOutputData = outputData;
+    for (size_t sampleIdx = 0; sampleIdx < sampleCount; sampleIdx++) {
+        pDelay = &consumeCpuCoeff[sampleIdx];
+        Float* pCoeff = consumeCpuCoeff;
+        Float sum = 0.0;
+        for (size_t coeffIdx = 0; coeffIdx < FIR_LENGTH; coeffIdx++) {
+            sum += *pDelay++ * *pCoeff++;
+        }
+        *pOutputData++ = sum;
+    }
+
+    // Copy current input data to start of delay line
+    Float* pTmp = &consumeCpuDelay[sampleCount];
+    pDelay = &consumeCpuDelay[0];
+    for (size_t sampleIdx = 0; sampleIdx < sampleCount; sampleIdx++) {
+        *pDelay++ = *pTmp++;
+    }
+
+    // Do scaling
+    for (size_t i = 0; i < sampleCount; i++) {
+        *outputData = scale * *outputData + offset;
+        outputData++;
+    }
 
     outputSignal.sendPacket(outputPacket);
     outputDomainSignal.sendPacket(packet.getDomainPacket());

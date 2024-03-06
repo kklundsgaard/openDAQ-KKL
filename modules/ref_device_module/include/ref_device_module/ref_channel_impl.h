@@ -46,6 +46,7 @@ public:
 
     // IRefChannel
     void collectSamples(std::chrono::microseconds curTime) override;
+    //void collectSamples(std::chrono::steady_clock::time_point);
     void globalSampleRateChanged(double newGlobalSampleRate) override;
     static std::string getEpoch();
     static RatioPtr getResolution();
@@ -93,6 +94,7 @@ private:
     void buildSignalDescriptors();
     [[nodiscard]] double coerceSampleRate(const double wantedSampleRate) const;
     void signalTypeChangedIfNotUpdating(const PropertyValueEventArgsPtr& args);
+    void initFunctionblocks();
 };
 
 END_NAMESPACE_REF_DEVICE_MODULE

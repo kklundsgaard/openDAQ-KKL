@@ -18,37 +18,66 @@ int main(int /*argc*/, const char* /*argv*/[])
     // Add a reference device and set it as root
     auto device = instance.addDevice("daqref://device0");
 
-    // Add statistics and renderer function block
+    FunctionBlockPtr renderer;
+#if 0
+    // Add statistics and scale function block
     FunctionBlockPtr statistics = instance.addFunctionBlock("ref_fb_module_statistics");
-    FunctionBlockPtr renderer = instance.addFunctionBlock("ref_fb_module_renderer");
+    FunctionBlockPtr scaler = instance.addFunctionBlock("ref_fb_module_scaler");
+#endif
 
+#if 0
     // Set renderer to draw 2.5s of data
+	renderer = instance.addFunctionBlock("ref_fb_module_renderer");
     renderer.setPropertyValue("Duration", 2.5);
+#endif
 
-    // Get channel and signal of reference device
-    const auto sineChannel = device.getChannels()[0];
-    const auto sineSignal = sineChannel.getSignals()[0];
-    
-    // Add noise to the sine wave
-    sineChannel.setPropertyValue("NoiseAmplitude", 1);
+    // Connect user space functionblocks
+    daq::FunctionBlockPtr pStat1, pScaler1, pScaler2;
+    auto channels = device.getChannels();
+    int channelIdx = 0;
+    for (auto channel:channels)
+    {
+        // Search for functionblocks
+        auto fbs = channel.getFunctionBlocks();
+    	const auto sineChannel = device.getChannels()[0];
+    	const auto sineSignal = sineChannel.getSignals()[0];
+    	
+        for (auto fb : fbs) {
+            if (fb.getLocalId() == "Scaler1") {
+                pScaler1 = fb;
+            } else if (fb.getLocalId() == "Scaler2") {
+                pScaler2 = fb;
+            } else if (fb.getLocalId() == "Stat1") {
+                pStat1 = fb;
+            }
+        }
 
-    // Connect the signals to the renderer and statistics
-    statistics.getInputPorts()[0].connect(sineSignal);
-    const auto averagedSine = statistics.getSignalsRecursive()[0];
-    
-    renderer.getInputPorts()[0].connect(sineSignal);
-    renderer.getInputPorts()[1].connect(averagedSine);
+        // Connect functionblocks
+        pScaler1.getInputPorts()[0].connect(sineSignal);
+        pScaler2.getInputPorts()[0].connect(pScaler1.getSignals()[0]);
+        pStat1.getInputPorts()[0].connect(pScaler2.getSignals()[0]);
+        if (renderer.assigned()) {
+            if (channelIdx < 4) {
+                renderer.getInputPorts()[channelIdx].connect(pStat1.getSignals()[0]);
+            }
+        }
+        channelIdx++;
+    }
+
+    //renderer.getInputPorts()[1].connect(sineSignal2);
 
     // Process and render data for 10s, modulating the amplitude
     double ampl_step = 0.1;
-    for (int i = 0; i < 400; ++i)
+    for (int i = 0; i < 300; ++i)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(25));
-        const double ampl = sineChannel.getPropertyValue("Amplitude");
-        if (9.95 < ampl || ampl < 3.05)
-            ampl_step *= -1;
-        sineChannel.setPropertyValue("Amplitude", ampl + ampl_step);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        //const double ampl = sineChannel1.getPropertyValue("Amplitude");
+        //if (9.95 < ampl || ampl < 3.05)
+        //    ampl_step *= -1;
+        //sineChannel1.setPropertyValue("Amplitude", ampl + ampl_step);
     }
+
+    printf("Program ended\n");
 
     return 0;
 }

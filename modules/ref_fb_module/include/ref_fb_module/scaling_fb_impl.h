@@ -59,6 +59,9 @@ private:
     std::string outputUnit;
     std::string outputName;
 
+    u_int64_t lastTimeOffset;
+    Float consumeCpuCoeff[512];
+    Float consumeCpuDelay[2048];
     void createInputPorts();
     void createSignals();
 

@@ -37,6 +37,7 @@ RefChannelImpl::RefChannelImpl(const ContextPtr& context, const ComponentPtr& pa
     , needsSignalTypeChanged(false)
 {
     initProperties();
+    initFunctionblocks();
     waveformChangedInternal();
     signalTypeChangedInternal();
     packetSizeChangedInternal();
@@ -97,13 +98,13 @@ void RefChannelImpl::initProperties()
     objPtr.getOnPropertyValueWrite("NoiseAmplitude") +=
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { waveformChanged(); };
 
-    const auto useGlobalSampleRateProp = BoolProperty("UseGlobalSampleRate", True);
+    const auto useGlobalSampleRateProp = BoolProperty("UseGlobalSampleRate", False);
 
     objPtr.addProperty(useGlobalSampleRateProp);
     objPtr.getOnPropertyValueWrite("UseGlobalSampleRate") +=
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { signalTypeChangedIfNotUpdating(args); };
 
-    const auto sampleRateProp = FloatPropertyBuilder("SampleRate", 100.0)
+    const auto sampleRateProp = FloatPropertyBuilder("SampleRate", HBK_SAMPLE_RATE)
                                     .setVisible(EvalValue("!$UseGlobalSampleRate"))
                                     .setUnit(Unit("Hz"))
                                     .setMinValue(1.0)
@@ -152,11 +153,11 @@ void RefChannelImpl::initProperties()
     objPtr.getOnPropertyValueWrite("CustomRange") +=
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { signalTypeChangedIfNotUpdating(args); };
 
-    objPtr.addProperty(BoolPropertyBuilder("FixedPacketSize", False).build());
+    objPtr.addProperty(BoolPropertyBuilder("FixedPacketSize", True).build());
     objPtr.getOnPropertyValueWrite("FixedPacketSize") +=
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { packetSizeChanged(); };
 
-    objPtr.addProperty(IntPropertyBuilder("PacketSize", 1000).setVisible(EvalValue("$FixedPacketSize")).build());
+    objPtr.addProperty(IntPropertyBuilder("PacketSize", HBK_BLOCK_SIZE).setVisible(EvalValue("$FixedPacketSize")).build());
     objPtr.getOnPropertyValueWrite("PacketSize") +=
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { packetSizeChanged(); };
 }
@@ -232,6 +233,7 @@ uint64_t RefChannelImpl::getSamplesSinceStart(std::chrono::microseconds time) co
 }
 
 void RefChannelImpl::collectSamples(std::chrono::microseconds curTime)
+// void RefChannelImpl::collectSamples(std::chrono::steady_clock::time_point curTime)
 {
     std::scoped_lock lock(sync);
     const uint64_t samplesSinceStart = getSamplesSinceStart(curTime);
@@ -425,6 +427,14 @@ void RefChannelImpl::endApplyProperties(const UpdatingActions& propsAndValues, b
         signalTypeChanged();
         needsSignalTypeChanged = false;
     }
+}
+
+void RefChannelImpl::initFunctionblocks()
+{
+    // Add statistics and scale function block
+    createAndAddNestedFunctionBlock("ref_fb_module_scaling", "Scaler1");
+    createAndAddNestedFunctionBlock("ref_fb_module_scaling", "Scaler2");
+    createAndAddNestedFunctionBlock("ref_fb_module_statistics", "Stat1");
 }
 
 END_NAMESPACE_REF_DEVICE_MODULE

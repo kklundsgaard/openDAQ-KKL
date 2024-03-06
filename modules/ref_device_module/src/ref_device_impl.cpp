@@ -12,6 +12,8 @@
 
 BEGIN_NAMESPACE_REF_DEVICE_MODULE
 
+using namespace std::chrono;
+
 RefDeviceImpl::RefDeviceImpl(size_t id, const ContextPtr& ctx, const ComponentPtr& parent, const StringPtr& localId)
     : GenericDevice<>(ctx, parent, localId)
     , id(id)
@@ -198,6 +200,9 @@ void RefDeviceImpl::acqLoop()
     using namespace std::chrono_literals;
 
     std::unique_lock<std::mutex> lock(sync);
+    
+    // std::chrono::steady_clock::time_point acqCurrentTime = startTime + std::chrono::seconds(5);
+
     while (!stopAcq)
     {
         cv.wait_for(lock, std::chrono::milliseconds(acqLoopTime));
@@ -209,7 +214,12 @@ void RefDeviceImpl::acqLoop()
             {
                 auto chPrivate = ch.asPtr<IRefChannel>();
                 chPrivate->collectSamples(curTime);
-            }
+
+	         	// for (int32_t blockNo = 0; blockNo < HBK_BURST_COUNT_DEVICE; blockNo++) {
+	            // 	chPrivate->collectSamples(acqCurrentTime + std::chrono::microseconds(HBK_LOOP_TIME_US*blockNo));
+	            // }
+	            // acqCurrentTime += std::chrono::microseconds(HBK_LOOP_TIME_US*HBK_BLOCK_TIME_MULT);   
+			}
 
             if (canChannel.assigned())
             {
@@ -234,7 +244,7 @@ void RefDeviceImpl::initProperties()
         [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) { updateGlobalSampleRate(); };
 
     const auto acqLoopTimePropInfo =
-        IntPropertyBuilder("AcquisitionLoopTime", 20).setUnit(Unit("ms")).setMinValue(10).setMaxValue(1000).build();
+        IntPropertyBuilder("AcquisitionLoopTime", HBK_LOOP_TIME_MS).setUnit(Unit("ms")).setMinValue(10).setMaxValue(1000).build();
 
     objPtr.addProperty(acqLoopTimePropInfo);
     objPtr.getOnPropertyValueWrite("AcquisitionLoopTime") += [this](PropertyObjectPtr& obj, PropertyValueEventArgsPtr& args) {

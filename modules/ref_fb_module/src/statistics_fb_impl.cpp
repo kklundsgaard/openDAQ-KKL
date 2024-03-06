@@ -227,6 +227,7 @@ void StatisticsFbImpl::configure()
 
     resetCalcBuf();
     triggerHistory.dropHistory();
+    aliveCount = 0;
     nextExpectedDomainValue = std::numeric_limits<Int>::max();
     valid = true;
 
@@ -396,6 +397,24 @@ void StatisticsFbImpl::calculateAndSendPackets(const DataPacketPtr& domainPacket
     uint8_t* outRmsDataPacketBuf = nullptr;
     DataPacketPtr avgDataPacket;
     DataPacketPtr rmsDataPacket;
+
+    // Check time
+    auto timeOffset = packet.getDomainPacket().getOffset().getIntValue();
+    u_int64_t sampleDelta = inputDomainDataDescriptor.getRule().getParameters()["delta"];
+    u_int64_t sampleRate = 1000000 / sampleDelta;
+    auto sampleIncrement = (timeOffset - lastTimeOffset) / sampleDelta;
+    lastTimeOffset = timeOffset;
+    
+    // Check block start time
+    if (availSamples != sampleIncrement) {
+        printf("Statistics - sampleRate: %ld sampleCount: %ld Time: %lu Time increment = %ld samples\n", sampleRate, availSamples, timeOffset, sampleIncrement);
+    }
+
+    if (sampleCount >= aliveCount) {
+        aliveCount = sampleCount + sampleRate;
+        printf("Time = %ld - Total sample count: %ld\n", sampleCount / sampleRate, sampleCount);
+    }
+    sampleCount += availSamples;
 
     if (calcAvg)
     {
